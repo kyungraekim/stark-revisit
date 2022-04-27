@@ -1,7 +1,5 @@
-import copy
 from typing import Optional
 
-import tensorflow as tf
 import tensorflow.keras as tk
 from tensorflow import Tensor
 

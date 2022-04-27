@@ -1,14 +1,11 @@
-import os
-from typing import List
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models._utils import IntermediateLayerGetter
 
-from export.portable.error import ExportError
-from lib.models.stark.position_encoding import build_position_encoding
 from export.portable import resnet as resnet_module
+from export.portable.error import ExportError
+from export.portable.position_encoding import build_position_encoding
 from utils.misc import is_main_process
 
 
@@ -73,7 +70,9 @@ class BackboneBase(nn.Module):
         self.num_channels = num_channels
 
     def forward(self, x, m):
-        return [*self.body(x)]
+        xs = [*self.body(x).values()]
+        masks = [F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0] for x in xs]
+        return xs, masks
 
 
 class Backbone(BackboneBase):
@@ -99,18 +98,13 @@ class Backbone(BackboneBase):
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers, net_type=net_type)
 
 
-class Joiner(nn.Module):
-    def __init__(self, backbone, position_embedding):
-        super(Joiner, self).__init__()
-        self.backbone = backbone
-        self.position_embedding = position_embedding
-
+class Joiner(nn.Sequential):
     def forward(self, x, m):
-        xs = self.backbone(x, m)
+        xs, masks = self[0](x, m)
         pos = []
-        for x in xs:
-            pos.append(self.position_embedding(x).to(x.tensors.dtype))
-        return xs, pos
+        for i in range(len(x)):
+            pos.append(self[1](xs[i], masks[i]).to(xs[i].dtype))
+        return xs, masks, pos
 
 
 def build_backbone(cfg):

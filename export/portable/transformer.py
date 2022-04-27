@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
-from export.portable.error import ExportError
+from portable.error import ExportError
 
 
 def check_inf(tensor):
@@ -62,8 +62,8 @@ class Transformer(nn.Module):
         self.d_model = d_model
         self.nhead = nhead
         self.d_feed = dim_feedforward
-        # 2021.1.7 Try dividing norm to avoid NAN
-        self.divide_norm = divide_norm
+        if divide_norm:
+            raise ExportError('divide_norm')
         self.scale_factor = float(d_model // nhead) ** 0.5
 
     def _reset_parameters(self):
@@ -107,7 +107,6 @@ class Transformer(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-
     def __init__(self, encoder_layer, num_layers, norm=None):
         super().__init__()
         self.layers = _get_clones(encoder_layer, num_layers)
@@ -201,10 +200,11 @@ class TransformerEncoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
 
         self.activation = _get_activation_fn(activation)
+
         if normalize_before:
-            raise ExportError("normalize_before")
+            raise ExportError('normalize_before')
         if divide_norm:
-            raise ExportError("divide_norm")
+            raise ExportError('divide_norm')
         self.scale_factor = float(d_model // nhead) ** 0.5
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
@@ -233,7 +233,6 @@ class TransformerEncoderLayer(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False, divide_norm=False):
         super().__init__()
@@ -252,11 +251,10 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout3 = nn.Dropout(dropout)
 
         self.activation = _get_activation_fn(activation)
-        if normalize_before:
-            raise ExportError("normalize_before")
+        self.normalize_before = normalize_before
 
         if divide_norm:
-            raise ExportError("divide_norm")
+            raise ExportError('divide_norm')
         self.scale_factor = float(d_model // nhead) ** 0.5
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
@@ -277,9 +275,6 @@ class TransformerDecoderLayer(nn.Module):
         tgt = self.norm1(tgt)
         # mutual attention
         queries, keys = self.with_pos_embed(tgt, query_pos), self.with_pos_embed(memory, pos)
-        if self.divide_norm:
-            queries = queries / torch.norm(queries, dim=-1, keepdim=True) * self.scale_factor
-            keys = keys / torch.norm(keys, dim=-1, keepdim=True)
         tgt2 = self.multihead_attn(queries, keys, memory, attn_mask=memory_mask,
                                    key_padding_mask=memory_key_padding_mask)[0]
         tgt = tgt + self.dropout2(tgt2)
@@ -301,7 +296,7 @@ class TransformerDecoderLayer(nn.Module):
 
 
 def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+    return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 
 def build_transformer(cfg):
