@@ -6,7 +6,7 @@ from torchvision.models._utils import IntermediateLayerGetter
 from export.portable import resnet as resnet_module
 from export.portable.error import ExportError
 from export.portable.position_encoding import build_position_encoding
-from utils.misc import is_main_process
+from lib.utils.misc import is_main_process
 
 
 class FrozenBatchNorm2d(nn.Module):

@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
-from portable.error import ExportError
+from export.portable.error import ExportError
 
 
 def check_inf(tensor):
