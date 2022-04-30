@@ -2,18 +2,12 @@ import tensorflow as tf
 import tensorflow.keras as tk
 
 
-# DATA.SEARCH.SIZE = 320
-# MODEL.HEAD_TYPE = "CORNOR"
-# MODEL.BACKBONE.DILATION = False
-# stride = 16
-# feat_sz = 20
-
-
 def conv(out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     return tk.Sequential([
         tk.layers.ZeroPadding2D(padding=padding),
-        tk.layers.Conv2D(out_planes, kernel_size=kernel_size, strides=stride, dilation_rate=dilation, use_bias=True),
-        tk.layers.BatchNormalization(out_planes),
+        tk.layers.Conv2D(out_planes, kernel_size=kernel_size, strides=stride, dilation_rate=dilation,
+                         use_bias=True),
+        tk.layers.BatchNormalization(epsilon=1e-5, momentum=0.9),
         tk.layers.ReLU()
     ])
 
@@ -41,7 +35,7 @@ class CornerPredictor(tk.Model):
         self.conv5_br = tk.layers.Conv2D(1, kernel_size=1)
 
         '''about coordinates and indexs'''
-        self.indice = tf.reshape(tf.range(0, self.feat_sz), (-1, 1)) * self.stride
+        self.indice = tf.cast(tf.reshape(tf.range(0, self.feat_sz), (-1, 1)) * self.stride, dtype=tf.float32)
         self.coord_x = tf.reshape(tf.tile(self.indice, (self.feat_sz, 1)), (self.feat_sz * self.feat_sz,))
         self.coord_y = tf.reshape(tf.tile(self.indice, (1, self.feat_sz)), (self.feat_sz * self.feat_sz,))
 
@@ -75,9 +69,9 @@ class CornerPredictor(tk.Model):
     def soft_argmax(self, score_map, return_dist=False, softmax=True):
         """ get soft-argmax coordinate for a given heatmap """
         score_vec = tf.reshape(score_map, (-1, self.feat_sz * self.feat_sz))  # (batch, feat_sz * feat_sz)
-        prob_vec = tf.softmax(score_vec, axis=1)
-        exp_x = tf.reduce_sum((self.coord_x * prob_vec), dim=1)
-        exp_y = tf.reduce_sum((self.coord_y * prob_vec), dim=1)
+        prob_vec = tf.math.softmax(score_vec, axis=1)
+        exp_x = tf.math.reduce_sum((self.coord_x * prob_vec), axis=1)
+        exp_y = tf.math.reduce_sum((self.coord_y * prob_vec), axis=1)
         if return_dist:
             if softmax:
                 return exp_x, exp_y, prob_vec
@@ -85,3 +79,52 @@ class CornerPredictor(tk.Model):
                 return exp_x, exp_y, score_vec
         else:
             return exp_x, exp_y
+
+    def import_torch_model(self, model):
+        name_format = 'conv{}_{}'
+        for postfix in ['br', 'tl']:
+            for i in range(1, 5):
+                name = name_format.format(i, postfix)
+                tf_layer = getattr(self, name)
+                assert isinstance(tf_layer, tk.Sequential)
+                torch_layer = getattr(model, name)
+                tf_layer.set_weights(get_seq_weights(torch_layer))
+
+            name = name_format.format(5, postfix)
+            tf_layer = getattr(self, name)
+            assert isinstance(tf_layer, tk.layers.Conv2D)
+            torch_layer = getattr(model, name)
+            tf_layer.set_weights(get_conv_weights(torch_layer))
+
+
+def get_seq_weights(layer):
+    conv_weights = get_conv_weights(layer[0])
+    bn_weights = get_bn_weights(layer[1])
+    return conv_weights + bn_weights
+
+
+def get_weights(layer, names):
+    return [getattr(layer, name).detach().numpy() for name in names]
+
+
+def get_conv_weights(layer):
+    weights = get_weights(layer, ['weight', 'bias'])
+    weights[0] = weights[0].transpose((2, 3, 1, 0))
+    return weights
+
+
+def get_bn_weights(layer):
+    return get_weights(layer, ['weight', 'bias', 'running_mean', 'running_var'])
+
+
+def build_box_head(cfg):
+    if cfg.MODEL.BACKBONE.DILATION is False:
+        stride = 16
+    else:
+        stride = 8
+    feat_sz = int(cfg.DATA.SEARCH.SIZE / stride)
+    channel = getattr(cfg.MODEL, "HEAD_DIM", 256)
+    print("head channel: %d" % channel)
+    corner_head = CornerPredictor(inplanes=cfg.MODEL.HIDDEN_DIM, channel=channel,
+                                  feat_sz=feat_sz, stride=stride)
+    return corner_head

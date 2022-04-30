@@ -2,6 +2,7 @@ from typing import Callable
 from unittest import TestCase
 
 import numpy as np
+import tensorflow
 import torch
 
 from lib.test.parameter.stark_s import parameters
@@ -12,6 +13,10 @@ origin = 0
 numpy = 1
 simple = 2
 tf = 3
+
+
+def _channel_last_to_first(array):
+    return array.transpose((0, 3, 1, 2))
 
 
 class _TestArray:
@@ -26,11 +31,13 @@ class _TestArray:
         self.mask = np.random.random((1, 464)) < 0.5
         self.pos = np.random.randint(0, 2, (464, 1, 256))
 
+        self.emb_feat = np.random.random((1, 20, 20, 256)).astype(np.float32)
+
     def backbone(self, dtype='np', cuda=False):
         if dtype == 'ndarray':
             return self.feature, self.mask
 
-        target_img = torch.tensor(self.target_img.transpose((0, 3, 1, 2)))
+        target_img = torch.tensor(_channel_last_to_first(self.target_img))
         mask = torch.tensor(self.img_mask)
         if cuda:
             target_img = target_img.cuda()
@@ -44,7 +51,7 @@ class _TestArray:
         if dtype == numpy:
             return self.backbone_feature, self.backbone_mask
 
-        feature = torch.tensor(self.backbone_feature.transpose((0, 3, 1, 2)))
+        feature = torch.tensor(_channel_last_to_first(self.backbone_feature))
         mask = torch.tensor(self.backbone_mask)
         if dtype == origin:
             return NestedTensor(feature, mask)
@@ -63,6 +70,12 @@ class _TestArray:
         if dtype == origin:
             return {'feat': feature, 'mask': mask, 'pos': pos}
         return feature, mask, pos
+
+    def box_prediction(self, dtype=numpy):
+        if dtype == numpy:
+            return self.emb_feat
+
+        return torch.tensor(_channel_last_to_first(self.emb_feat))
 
 
 def _apply(fn):
@@ -123,6 +136,6 @@ def _to_numpy(tensor, channel_align):
         tensor = tensor.detach().numpy()
         if channel_align:
             tensor = tensor.transform((0, 2, 3, 1))
-    elif isinstance(tensor, tf.Tensor):
+    elif isinstance(tensor, tensorflow.Tensor):
         tensor = tensor.numpy()
     return tensor
