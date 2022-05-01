@@ -21,4 +21,4 @@ class BoxHeadTest(test_utils.DualModelTest):
         box_p = torch_model(self.inputs.box_prediction(dtype=test_utils.simple))
         tf_model.import_torch_model(torch_model)
         box_c = tf_model(self.inputs.box_prediction(dtype=test_utils.numpy))
-        self.assertLessEqual(self.diff(box_p, box_c), self.epsilon)
+        self.diff_inside(box_p, box_c, self.epsilon)

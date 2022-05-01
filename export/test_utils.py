@@ -37,8 +37,8 @@ class _TestArray:
 
         self.emb_feat = np.random.random((1, 20, 20, 256)).astype(np.float32)
 
-    def backbone(self, dtype='np', cuda=False):
-        if dtype == 'ndarray':
+    def backbone(self, dtype=numpy, cuda=False):
+        if dtype == numpy:
             return self.feature, self.mask
 
         target_img = torch.tensor(_channel_last_to_first(self.target_img))
@@ -141,7 +141,7 @@ class DualModelTest(TestCase):
             src.import_torch_model(ref)
         return ref, src
 
-    def diff(self, a, b, channel_align=False):
+    def _diff(self, a, b, channel_align=False):
         a = _to_numpy(a, channel_align)
         b = _to_numpy(b, channel_align)
         if a.dtype == bool:
@@ -149,6 +149,10 @@ class DualModelTest(TestCase):
         else:
             diff_arr = np.abs(a - b)
         return diff_arr.max()
+
+    def diff_inside(self, a, b, epsilon=1e-5, channel_align=False):
+        diff_value = self._diff(a, b, channel_align=channel_align)
+        self.assertLessEqual(diff_value, epsilon)
 
 
 def _to_numpy(tensor, channel_align):

@@ -20,8 +20,8 @@ class BackboneTest(test_utils.DualModelTest):
         xs_p, mask_p, pos_p = bb_portable(*self.inputs.backbone(test_utils.simple))
 
         for o, p in zip(xs_o, xs_p):
-            self.assertLessEqual(self.diff(o, p), self.epsilon)
+            self.diff_inside(o, p, self.epsilon)
         for o, p in zip(mask_o, mask_p):
-            self.assertLessEqual(self.diff(o, p), self.epsilon)
+            self.diff_inside(o, p, self.epsilon)
         for o, p in zip(pos_o, pos_p):
-            self.assertLessEqual(self.diff(o, p), self.epsilon)
+            self.diff_inside(o, p, self.epsilon)

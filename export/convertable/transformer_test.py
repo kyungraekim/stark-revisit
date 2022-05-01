@@ -29,5 +29,5 @@ class TransformerTest(test_utils.DualModelTest):
         tf_model(*self.inputs.transformer_net(dtype=test_utils.numpy))
         tf_model.import_torch_model(torch_model)
         box_c = tf_model(*self.inputs.transformer_net(dtype=test_utils.numpy))
-        self.assertLessEqual(self.diff(box_p[0], box_c[0]), self.epsilon)
-        self.assertLessEqual(self.diff(box_p[1], box_c[1]), self.epsilon)
+        self.diff_inside(box_p[0], box_c[0], self.epsilon)
+        self.diff_inside(box_p[1], box_c[1], self.epsilon)

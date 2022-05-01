@@ -47,4 +47,4 @@ class AttentionTest(test_utils.DualModelTest):
         tf_model.import_torch_model(torch_model)
         v_c = tf_model((q, k, v), key_padding_mask=key_padding_mask)
         for p, c in zip(v_p, v_c):
-            self.assertLessEqual(self.diff(p, c), self.epsilon)
+            self.diff_inside(p, c, self.epsilon)
