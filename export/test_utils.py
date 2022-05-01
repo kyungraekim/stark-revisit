@@ -145,10 +145,10 @@ class DualModelTest(TestCase):
         a = _to_numpy(a, channel_align)
         b = _to_numpy(b, channel_align)
         if a.dtype == bool:
-            diff_arr = a ^ b
+            diff_arr = (a ^ b).astype(int)
         else:
             diff_arr = np.abs(a - b)
-        return diff_arr.sum()
+        return diff_arr.max()
 
 
 def _to_numpy(tensor, channel_align):
