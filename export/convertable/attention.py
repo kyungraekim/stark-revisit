@@ -1,8 +1,8 @@
+import math
 from typing import Optional
 
 import tensorflow as tf
-
-tk = tf.keras
+import tensorflow.keras as tk
 
 
 class MultiheadAttention(tk.layers.Layer):
@@ -52,27 +52,27 @@ class MultiheadAttention(tk.layers.Layer):
         w_q = self.in_proj_weight[:self.model_dim, :]
         b = self.in_proj_bias[:self.model_dim]
 
-        WQ = tf.matmul(query, w_q, transpose_b=True) + b
+        qw = tf.matmul(query, w_q, transpose_b=True) + b
 
         w_k = self.in_proj_weight[self.model_dim:2 * self.model_dim, :]
         b = self.in_proj_bias[self.model_dim:2 * self.model_dim]
-        WK = tf.matmul(key, w_k, transpose_b=True) + b
+        kw = tf.matmul(key, w_k, transpose_b=True) + b
 
         w_v = self.in_proj_weight[2 * self.model_dim:, :]
         b = self.in_proj_bias[2 * self.model_dim:]
-        WV = tf.matmul(value, w_v, transpose_b=True) + b
+        vw = tf.matmul(value, w_v, transpose_b=True) + b
 
-        WQ = tf.reshape(WQ, [target_len, batch_size * self.num_heads, self.head_dim])
-        WQ = tf.transpose(WQ, [1, 0, 2])
+        qw = tf.reshape(qw, [target_len, batch_size * self.num_heads, self.head_dim])
+        qw = tf.transpose(qw, [1, 0, 2])
 
-        WK = tf.reshape(WK, [source_len, batch_size * self.num_heads, self.head_dim])
-        WK = tf.transpose(WK, [1, 0, 2])
+        kw = tf.reshape(kw, [source_len, batch_size * self.num_heads, self.head_dim])
+        kw = tf.transpose(kw, [1, 0, 2])
 
-        WV = tf.reshape(WV, [source_len, batch_size * self.num_heads, self.head_dim])
-        WV = tf.transpose(WV, [1, 0, 2])
+        vw = tf.reshape(vw, [source_len, batch_size * self.num_heads, self.head_dim])
+        vw = tf.transpose(vw, [1, 0, 2])
 
-        WQ = WQ / math.sqrt(WQ.shape[-1])
-        attn_output_weights = tf.matmul(WQ, WK, transpose_b=True)
+        qw = qw / math.sqrt(qw.shape[-1])
+        attn_output_weights = tf.matmul(qw, kw, transpose_b=True)
 
         if attn_mask is not None:
             attn_output_weights += attn_mask
@@ -92,7 +92,7 @@ class MultiheadAttention(tk.layers.Layer):
         attn_output_weights = tf.nn.softmax(attn_output_weights, axis=-1)
         attn_output_weights = self.dropout(attn_output_weights, training=training)
 
-        attn_output = tf.matmul(attn_output_weights, WV)
+        attn_output = tf.matmul(attn_output_weights, vw)
         attn_output = tf.transpose(attn_output, [1, 0, 2])
         attn_output = tf.reshape(attn_output, [target_len, batch_size, self.model_dim])
         attn_output = tf.matmul(attn_output, self.out_proj_weight,
@@ -105,3 +105,7 @@ class MultiheadAttention(tk.layers.Layer):
             return attn_output, avg_weights
 
         return attn_output
+
+    def import_torch_model(self, model):
+        torch_weights = model.in_proj_weight, model.in_proj_bias, model.out_proj.weight, model.out_proj.bias
+        self.set_weights([tensor.detach().numpy() for tensor in torch_weights])

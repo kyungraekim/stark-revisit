@@ -29,7 +29,11 @@ class _TestArray:
 
         self.feature = np.random.random((464, 1, 256)).astype(np.float32)
         self.mask = np.random.random((1, 464)) < 0.5
+        self.query = np.random.random((1, 256)).astype(np.float32)
         self.pos = np.random.randint(0, 2, (464, 1, 256))
+
+        self.q_k = np.random.random((464, 1, 256)).astype(np.float32)
+        self.feature_mask = self.feature < 0.5
 
         self.emb_feat = np.random.random((1, 20, 20, 256)).astype(np.float32)
 
@@ -60,7 +64,7 @@ class _TestArray:
 
     def transformer(self, dtype=numpy, cuda=False):
         if dtype == numpy:
-            return self.feature, self.mask.self.pos
+            return self.feature, self.mask, self.pos
 
         feature, mask, pos = (torch.tensor(x) for x in [self.feature, self.mask, self.pos])
         if cuda:
@@ -70,6 +74,22 @@ class _TestArray:
         if dtype == origin:
             return {'feat': feature, 'mask': mask, 'pos': pos}
         return feature, mask, pos
+
+    def transformer_net(self, dtype=numpy):
+        feature, mask, pos = self.transformer(dtype=dtype)
+
+        query = self.query
+        if dtype != numpy:
+            query = torch.tensor(self.query)
+
+        return feature, mask, query, pos
+
+    def attention(self, dtype=numpy):
+        outputs = [self.q_k, self.q_k, self.feature, self.mask]
+        if dtype == numpy:
+            return outputs
+
+        return [torch.tensor(x) for x in outputs]
 
     def box_prediction(self, dtype=numpy):
         if dtype == numpy:
