@@ -5,6 +5,7 @@ import tensorflow.keras as tk
 
 from export.convertable import attention
 from export.convertable.attention import MultiheadAttention
+from export.convertable.torch_to_tf import get_linear_weights
 
 
 def _get_activation_fn(activation):
@@ -226,16 +227,6 @@ class TransformerDecoderLayer(tk.layers.Layer):
             tf_layer = getattr(self, layer)
             torch_layer = getattr(model, layer)
             tf_layer.set_weights(get_linear_weights(torch_layer))
-
-
-def get_weights(layer, names):
-    return [getattr(layer, name).detach().numpy() for name in names]
-
-
-def get_linear_weights(layer):
-    weights = get_weights(layer, ['weight', 'bias'])
-    weights[0] = weights[0].transpose()
-    return weights
 
 
 def build_transformer(cfg):

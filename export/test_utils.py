@@ -39,7 +39,7 @@ class _TestArray:
 
     def backbone(self, dtype=numpy, cuda=False):
         if dtype == numpy:
-            return self.feature, self.mask
+            return self.target_img, self.mask
 
         target_img = torch.tensor(_channel_last_to_first(self.target_img))
         mask = torch.tensor(self.img_mask)
@@ -152,6 +152,7 @@ class DualModelTest(TestCase):
 
     def diff_inside(self, a, b, epsilon=1e-5, channel_align=False):
         diff_value = self._diff(a, b, channel_align=channel_align)
+        print(self.__class__, diff_value)
         self.assertLessEqual(diff_value, epsilon)
 
 
@@ -159,7 +160,7 @@ def _to_numpy(tensor, channel_align):
     if isinstance(tensor, torch.Tensor):
         tensor = tensor.detach().numpy()
         if channel_align:
-            tensor = tensor.transform((0, 2, 3, 1))
+            tensor = tensor.transpose((0, 2, 3, 1))
     elif isinstance(tensor, tensorflow.Tensor):
         tensor = tensor.numpy()
     return tensor
