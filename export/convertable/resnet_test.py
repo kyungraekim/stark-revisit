@@ -107,3 +107,22 @@ class ResNetTest(test_utils.DualModelTest):
         tf_model.import_torch_model(torch_model)
         v_c = tf_model(sample_img)
         self.diff_inside(v_p, v_c, channel_align=True, epsilon=self.epsilon)
+
+    def test_tflite(self):
+        _, tf_model = self.get_models()
+        tf_model(self.inputs.backbone(dtype=test_utils.numpy)[0])
+        tflite_model = self.get_tf_converted(tf_model)
+        self.assertIsNotNone(tflite_model)
+
+    def test_torch_to_tflite(self):
+        torch_model, tf_model = self.get_models()
+        sample_img, _ = self.inputs.backbone(dtype=test_utils.simple)
+        sample_img, _ = self.inputs.backbone(dtype=test_utils.numpy)
+        tf_model(sample_img)
+        tf_model.import_torch_model(torch_model)
+        v_c = tf_model(sample_img)
+        tflite_model = self.get_tf_converted(tf_model)
+        self.assertIsNotNone(tflite_model)
+
+        v_lite = self.call_tflite_model(tflite_model, sample_img)[0]
+        self.diff_inside(v_c, v_lite, epsilon=1e-1)
