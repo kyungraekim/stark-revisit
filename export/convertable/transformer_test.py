@@ -17,7 +17,7 @@ class TransformerTest(test_utils.DualModelTest):
 
     def test_inference(self):
         _, tf_model = self.get_models()
-        box_c = tf_model(*self.inputs.transformer_net(dtype=test_utils.numpy))
+        box_c = tf_model(self.inputs.transformer_net(dtype=test_utils.numpy))
         self.assertIsNotNone(box_c)
 
     def test_validate(self):
@@ -26,8 +26,8 @@ class TransformerTest(test_utils.DualModelTest):
             *self.inputs.transformer_net(dtype=test_utils.simple),
             return_encoder_output=True
         )
-        tf_model(*self.inputs.transformer_net(dtype=test_utils.numpy))
+        tf_model(self.inputs.transformer_net(dtype=test_utils.numpy))
         tf_model.import_torch_model(torch_model)
-        box_c = tf_model(*self.inputs.transformer_net(dtype=test_utils.numpy))
+        box_c = tf_model(self.inputs.transformer_net(dtype=test_utils.numpy))
         self.diff_inside(box_p[0], box_c[0], self.epsilon)
         self.diff_inside(box_p[1], box_c[1], self.epsilon)

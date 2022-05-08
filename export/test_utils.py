@@ -30,7 +30,7 @@ class _TestArray:
         self.feature = np.random.random((464, 1, 256)).astype(np.float32)
         self.mask = np.random.random((1, 464)) < 0.5
         self.query = np.random.random((1, 256)).astype(np.float32)
-        self.pos = np.random.randint(0, 2, (464, 1, 256))
+        self.pos = np.random.randint(0, 2, (464, 1, 256)).astype(np.float32)
 
         self.q_k = np.random.random((464, 1, 256)).astype(np.float32)
         self.feature_mask = self.feature < 0.5
@@ -159,7 +159,30 @@ class DualModelTest(TestCase):
         converter = tensorflow.lite.TFLiteConverter.from_keras_model(model)
         converter.optimizations = [tensorflow.lite.Optimize.DEFAULT]
         converter.target_spec.supported_types = [tensorflow.float16]
-        return converter.convert()
+        flat_buffer = converter.convert()
+        tflite_interpreter = tensorflow.lite.Interpreter(model_content=flat_buffer)
+        tflite_interpreter.allocate_tensors()
+        input_details = tflite_interpreter.get_input_details()
+        output_details = tflite_interpreter.get_output_details()
+
+        class_name = str(type(model).__name__)
+        for index, input_detail in enumerate(input_details):
+            print("{} input({}) - name: {}, shape: {}, type: {}".format(
+                class_name, index, input_detail['name'], input_detail['shape'], input_detail['dtype'])
+            )
+
+        for index, output_detail in enumerate(output_details):
+            print("{} output({}) - name: {}, shape: {}, type: {}".format(
+                class_name, index, output_detail['name'], output_detail['shape'], output_detail['dtype'])
+            )
+        return tflite_interpreter
+
+    def call_tflite_model(self, tflite_model: tensorflow.lite.Interpreter, *args):
+        for input_detail, input_tensor in zip(tflite_model.get_input_details(), args):
+            tflite_model.set_tensor(input_detail['index'], input_tensor)
+        tflite_model.invoke()
+        return [tflite_model.get_tensor(output_detail['index']) for output_detail
+                in tflite_model.get_output_details()]
 
 
 def _to_numpy(tensor, channel_align):

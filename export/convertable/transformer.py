@@ -31,7 +31,7 @@ class Transformer(tk.Model):
         self.d_feed = dim_feedforward
         self.scale_factor = float(d_model // nhead) ** 0.5
 
-    def call(self, feat, mask, query_embed, pos_embed):
+    def call(self, x):
         """
 
         :param feat: (H1W1+H2W2, bs, C)
@@ -40,6 +40,7 @@ class Transformer(tk.Model):
         :param pos_embed: (H1W1+H2W2, bs, C)
         :return:
         """
+        feat, mask, query_embed, pos_embed = x
         memory = self.encoder(feat, src_key_padding_mask=mask, pos=pos_embed)
         assert len(query_embed.shape) in [2, 3]
         if len(query_embed.shape) == 2:
