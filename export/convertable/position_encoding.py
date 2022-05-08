@@ -51,7 +51,8 @@ class PositionEmbeddingSine(tk.Model):
 
 
 def build_position_encoding(cfg):
-    steps = cfg.MODEL.HIDDEN_DIM // 2
-    position_embedding = PositionEmbeddingSine(steps, normalize=True)
+    return build_position_encoding_with_dim(cfg.MODEL.HIDDEN_DIM // 2)
 
-    return position_embedding
+
+def build_position_encoding_with_dim(dim):
+    return PositionEmbeddingSine(dim, normalize=True)

@@ -39,7 +39,7 @@ class _TestArray:
 
     def backbone(self, dtype=numpy, cuda=False):
         if dtype == numpy:
-            return self.target_img, self.mask
+            return self.target_img, self.img_mask
 
         target_img = torch.tensor(_channel_last_to_first(self.target_img))
         mask = torch.tensor(self.img_mask)
@@ -154,6 +154,12 @@ class DualModelTest(TestCase):
         diff_value = self._diff(a, b, channel_align=channel_align)
         print(self.__class__, diff_value)
         self.assertLessEqual(diff_value, epsilon)
+
+    def get_tf_converted(self, model):
+        converter = tensorflow.lite.TFLiteConverter.from_keras_model(model)
+        converter.optimizations = [tensorflow.lite.Optimize.DEFAULT]
+        converter.target_spec.supported_types = [tensorflow.float16]
+        return converter.convert()
 
 
 def _to_numpy(tensor, channel_align):
