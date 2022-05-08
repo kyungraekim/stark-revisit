@@ -28,3 +28,22 @@ class PositionEncodingTest(test_utils.DualModelTest):
         tf_model.import_torch_model(torch_model)
         v_c = tf_model(position)
         self.diff_inside(v_p, v_c, channel_align=True, epsilon=self.epsilon)
+
+    def test_tflite(self):
+        _, tf_model = self.get_models()
+        _, position = self.inputs.position(dtype=test_utils.numpy)
+        tf_model(position)
+        tflite_model = self.get_tf_converted(tf_model)
+        self.assertIsNotNone(tflite_model)
+
+    def test_torch_to_tflite(self):
+        torch_model, tf_model = self.get_models()
+        _, position = self.inputs.position(dtype=test_utils.numpy)
+        tf_model(position)
+        tf_model.import_torch_model(torch_model)
+        v_c = tf_model(position)
+        tflite_model = self.get_tf_converted(tf_model)
+        self.assertIsNotNone(tflite_model)
+
+        v_lite = self.call_tflite_model(tflite_model, position)[0]
+        self.diff_inside(v_c, v_lite, epsilon=1e-2)
