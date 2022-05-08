@@ -15,32 +15,17 @@ class ShapeFixedEmbedding(tk.layers.Embedding):
         super(ShapeFixedEmbedding, self).build((*input_shape, self.input_dim))
 
 
-class StarkS:
-    def __init__(self, backbone, position_encoder, transformer, box_head, query, bottleneck):
-        self.backbone = backbone
-        self.position_encoder = position_encoder
-        self.bottleneck = bottleneck
-        self.transformer = transformer
-        self.query_embed = query
-        self.box_head = box_head
-        self.feat_sz_s = int(box_head.feat_sz)
-        self.feat_len_s = int(box_head.feat_sz ** 2)
+class FeatureExtractor(tk.Model):
+    def __init__(self, cfg):
+        super(FeatureExtractor, self).__init__()
+        embedding_dim = cfg.MODEL.HIDDEN_DIM
+        self.position_encoder = build_position_encoding(cfg)
 
-    def import_torch_model(self, model):
-        self.import_torch_feature_extractor(model)
-        self.import_torch_transformer(model)
+        self.backbone = build_backbone(cfg)
+        self.bottleneck = tk.layers.Conv2D(embedding_dim, 1)
 
-    def import_torch_transformer(self, model):
-        self.transformer.import_torch_model(model.transformer)
-        self.box_head.import_torch_model(model.box_head)
-        self.query_embed.set_weights(get_embedding_weights(model.query_embed))
-
-    def import_torch_feature_extractor(self, model):
-        self.backbone.import_torch_model(model.backbone[0].body)
-        self.position_encoder.import_torch_model(model.backbone[1])
-        self.bottleneck.set_weights(get_conv_weights(model.bottleneck))
-
-    def forward_backbone(self, search_region, region_mask):
+    def call(self, inputs):
+        search_region, region_mask = inputs
         feature_backbone = self.backbone(search_region)
         channeled_float_mask = tf.cast(region_mask[..., tf.newaxis], tf.float32)
         resized_mask = tf.compat.v1.image.resize_nearest_neighbor(channeled_float_mask,
@@ -57,7 +42,27 @@ class StarkS:
         position_embedding = _bhwc_to_hwbc(position_embedding)
         return feature, resized_mask, position_embedding
 
-    def forward_transformer(self, feature, mask, position):
+    def import_torch_model(self, model):
+        self.backbone.import_torch_model(model.backbone[0].body)
+        self.position_encoder.import_torch_model(model.backbone[1])
+        self.bottleneck.set_weights(get_conv_weights(model.bottleneck))
+
+
+class Detector(tk.Model):
+    def __init__(self, cfg):
+        super(Detector, self).__init__()
+        self.feature_extractor = FeatureExtractor(cfg)
+        self.transformer = build_transformer(cfg)
+        box_head = build_box_head(cfg)
+        self.feat_sz_s = int(box_head.feat_sz)
+        self.feat_len_s = int(box_head.feat_sz ** 2)
+        self.box_head = box_head
+
+        self.query_embed = tk.layers.Embedding(cfg.MODEL.NUM_OBJECT_QUERIES, self.transformer.d_model)
+        self.query_embed.build(None)
+
+    def call(self, inputs):
+        feature, mask, position = inputs
         # Forward the transformer encoder and decoder
         # (1, B, N, C), (HW1 + HW2, B, C)
         output_embed, enc_mem = self.transformer((feature, mask, self.query_embed.weights[0], position))
@@ -73,6 +78,33 @@ class StarkS:
         x0, y0, x1, y1 = tf.unstack(output_coord, axis=-1)
         cx, cy, w, h = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
         return tf.stack([cx, cy, w, h], axis=-1)
+
+    def import_torch_model(self, model):
+        self.transformer.import_torch_model(model.transformer)
+        self.box_head.import_torch_model(model.box_head)
+        self.query_embed.set_weights(get_embedding_weights(model.query_embed))
+
+
+class StarkS:
+    def __init__(self, feature_extractor, detector):
+        self.feature_extractor = feature_extractor
+        self.detector = detector
+
+    def import_torch_model(self, model):
+        self.import_torch_feature_extractor(model)
+        self.import_torch_transformer(model)
+
+    def import_torch_transformer(self, model):
+        self.detector.import_torch_model(model)
+
+    def import_torch_feature_extractor(self, model):
+        self.feature_extractor.import_torch_model(model)
+
+    def forward_backbone(self, search_region, region_mask):
+        return self.feature_extractor((search_region, region_mask))
+
+    def forward_transformer(self, feature, mask, position):
+        return self.detector((feature, mask, position))
 
 
 def _bhwc_to_hwbc(tensor):
@@ -99,14 +131,6 @@ def build_backbone(cfg):
 
 
 def build_stark_s(cfg):
-    position_embedding = build_position_encoding(cfg)
-
-    backbone = build_backbone(cfg)
-    transformer = build_transformer(cfg)
-    box_head = build_box_head(cfg)
-
-    query_embed = tk.layers.Embedding(cfg.MODEL.NUM_OBJECT_QUERIES, transformer.d_model)
-    query_embed.build(None)
-    bottleneck = tk.layers.Conv2D(transformer.d_model, 1)
-
-    return StarkS(backbone, position_embedding, transformer, box_head, query_embed, bottleneck)
+    feature_extractor = FeatureExtractor(cfg)
+    detector = Detector(cfg)
+    return StarkS(feature_extractor, detector)
