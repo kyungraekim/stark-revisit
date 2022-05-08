@@ -1,10 +1,3 @@
-import numpy as np
-import tensorflow as tf
-import tensorflow.keras as tk
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from export import test_utils
 from export.convertable.stark_s import build_stark_s
 from export.portable.stark_s import build_starks
@@ -36,5 +29,5 @@ class StarkSTest(test_utils.DualModelTest):
         tf_model.forward_transformer(*self.inputs.transformer(dtype=test_utils.numpy))
         tf_model.import_torch_transformer(tc_model)
         tf_output = tf_model.forward_transformer(*self.inputs.transformer(dtype=test_utils.numpy))
-        for tc_v, tf_v in zip(tc_output, tf_output):
-            self.diff_inside(tc_v, tf_v, epsilon=1e5)
+        for tc_v, tf_v in zip(tc_output[1], tf_output):
+            self.diff_inside(tc_v, tf_v)

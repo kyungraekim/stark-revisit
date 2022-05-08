@@ -17,7 +17,7 @@ def get_linear_weights(layer):
 
 
 def get_embedding_weights(layer):
-    return get_weights(layer, 'weight')
+    return get_weights(layer, ['weight'])
 
 
 def get_weights(layer, names):

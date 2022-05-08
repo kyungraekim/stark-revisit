@@ -8,6 +8,13 @@ from export.convertable.torch_to_tf import get_embedding_weights, get_conv_weigh
 from export.convertable.transformer import build_transformer
 
 
+class ShapeFixedEmbedding(tk.layers.Embedding):
+    def build(self, input_shape=None):
+        if input_shape is None:
+            input_shape = [None]
+        super(ShapeFixedEmbedding, self).build((*input_shape, self.input_dim))
+
+
 class StarkS:
     def __init__(self, backbone, position_encoder, transformer, box_head, query, bottleneck):
         self.backbone = backbone
@@ -16,6 +23,8 @@ class StarkS:
         self.transformer = transformer
         self.query_embed = query
         self.box_head = box_head
+        self.feat_sz_s = int(box_head.feat_sz)
+        self.feat_len_s = int(box_head.feat_sz ** 2)
 
     def import_torch_model(self, model):
         self.import_torch_feature_extractor(model)
@@ -47,6 +56,23 @@ class StarkS:
         resized_mask = tf.reshape(resized_mask, (resized_mask.shape[0], -1))
         position_embedding = _bhwc_to_hwbc(position_embedding)
         return feature, resized_mask, position_embedding
+
+    def forward_transformer(self, feature, mask, position):
+        # Forward the transformer encoder and decoder
+        # (1, B, N, C), (HW1 + HW2, B, C)
+        output_embed, enc_mem = self.transformer((feature, mask, self.query_embed.weights[0], position))
+        # Forward the corner head
+        enc_opt = tf.transpose(enc_mem[-self.feat_len_s:], (1, 0, 2))  # (HW1 + HW2, B, C) -> (B, HW2, C)
+        dec_opt = tf.squeeze(output_embed, 0)  # (1, B, N, C) -> (B, N, C)
+        att = tf.matmul(enc_opt, dec_opt, transpose_b=True)  # (B, HW2, N)
+        opt = tf.expand_dims(enc_opt, -2) * tf.expand_dims(att, -1)  # (B, HW2, N, C)
+        opt = tf.transpose(opt, (0, 2, 1, 3))  # (B, HW2, N, C) -> (B, N, HW2, C)
+        b, n, hw, c = opt.shape
+        opt = tf.reshape(opt, (-1, self.feat_sz_s, self.feat_sz_s, c))
+        output_coord = self.box_head(opt)
+        x0, y0, x1, y1 = tf.unstack(output_coord, axis=-1)
+        cx, cy, w, h = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
+        return tf.stack([cx, cy, w, h], axis=-1)
 
 
 def _bhwc_to_hwbc(tensor):
@@ -80,6 +106,7 @@ def build_stark_s(cfg):
     box_head = build_box_head(cfg)
 
     query_embed = tk.layers.Embedding(cfg.MODEL.NUM_OBJECT_QUERIES, transformer.d_model)
+    query_embed.build(None)
     bottleneck = tk.layers.Conv2D(transformer.d_model, 1)
 
     return StarkS(backbone, position_embedding, transformer, box_head, query_embed, bottleneck)
